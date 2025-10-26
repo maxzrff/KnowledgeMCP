@@ -58,9 +58,9 @@ class ProcessingSettings(BaseSettings):
 class MCPSettings(BaseSettings):
     """MCP server configuration."""
 
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = Field(default=3000, ge=1024, le=65535)
-    transport: Literal["http", "websocket"] = "http"
+    transport: Literal["http", "http-streamable", "websocket", "stdio"] = "http-streamable"
 
 
 class Settings(BaseSettings):

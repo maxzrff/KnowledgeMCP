@@ -107,6 +107,31 @@ class VectorStore:
 
         return results
 
+    def get_all_documents(self, collection_name: str = "knowledge_base_documents") -> dict[str, Any]:
+        """
+        Get all documents from the vector store.
+
+        Args:
+            collection_name: Name of the collection
+
+        Returns:
+            Dictionary with ids, documents, metadatas, embeddings
+        """
+        collection = self.get_or_create_collection(collection_name)
+        count = collection.count()
+        
+        if count == 0:
+            return {"ids": [], "documents": [], "metadatas": [], "embeddings": []}
+        
+        # Get all items (ChromaDB default limit is 10, so we need to specify)
+        results = collection.get(
+            limit=count,
+            include=["metadatas", "documents"]
+        )
+        
+        logger.info(f"Retrieved {count} documents from collection '{collection_name}'")
+        return results
+
     def reset(self) -> None:
         """Reset the entire database (for testing)."""
         self._client.reset()

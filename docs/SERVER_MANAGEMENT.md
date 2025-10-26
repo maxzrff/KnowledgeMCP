@@ -4,7 +4,7 @@ This directory contains scripts for managing the MCP Knowledge Server.
 
 ## server.sh - Server Management Script
 
-A comprehensive bash script for managing the MCP server lifecycle.
+A comprehensive bash script for managing the MCP server lifecycle. The server exposes both HTTP (port 3000) and stdio transports for different MCP clients.
 
 ### Usage
 
@@ -45,6 +45,7 @@ A comprehensive bash script for managing the MCP server lifecycle.
 ### Features
 
 - ✅ **Background execution**: Server runs as daemon
+- ✅ **HTTP endpoint**: Exposed at http://localhost:3000 for Copilot CLI
 - ✅ **PID tracking**: Stores process ID in `.mcp_server.pid`
 - ✅ **Log management**: All output goes to `mcp_server.log`
 - ✅ **Status checking**: Shows if server is running with process info
@@ -110,6 +111,41 @@ source venv/bin/activate
 
 # Run in foreground with debug logging
 KNOWLEDGE_LOG_LEVEL=DEBUG python -m src.mcp.server
+```
+
+The server will be available at:
+- HTTP endpoint: http://localhost:3000
+- Stdio transport: via stdin/stdout
+
+## MCP Client Configuration
+
+### GitHub Copilot CLI
+
+Add to `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "knowledge": {
+    "type": "http",
+    "url": "http://localhost:3000"
+  }
+}
+```
+
+### Claude Desktop
+
+Add to Claude Desktop config (uses stdio transport):
+
+```json
+{
+  "mcpServers": {
+    "knowledge": {
+      "command": "python",
+      "args": ["-m", "src.mcp.server"],
+      "cwd": "/path/to/KnowledgeMCP"
+    }
+  }
+}
 ```
 
 ## Support

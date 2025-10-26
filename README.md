@@ -10,6 +10,8 @@ A Model Context Protocol (MCP) server that enables AI coding assistants and agen
 - ✅ **Multi-Format Support**: PDF, DOCX, PPTX, XLSX, HTML, and images (JPG, PNG, SVG)
 - ✅ **Intelligent OCR**: Automatic decision between text extraction and OCR
 - ✅ **Async Processing**: Background indexing with progress tracking
+- ✅ **Persistent Storage**: ChromaDB vector store with reliable document removal
+- ✅ **HTTP & Stdio Transports**: Compatible with GitHub Copilot CLI and Claude Desktop
 - ✅ **MCP Integration**: Compatible with Claude Desktop, GitHub Copilot, and other MCP clients
 - ✅ **Local & Private**: All processing happens locally, no data leaves your system
 
@@ -237,16 +239,55 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-### GitHub Copilot
+**Note**: Claude Desktop uses stdio transport. The server automatically detects the transport mode.
 
-Configure MCP adapter in your Copilot settings with server URL: `http://localhost:3000`
+### GitHub Copilot CLI
+
+The server exposes an HTTP endpoint for Copilot CLI integration using MCP Streamable HTTP.
+
+**Step 1: Start the server**
+```bash
+./server.sh start
+```
+
+**Step 2: Configure Copilot CLI**
+
+Add to `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "knowledge": {
+    "type": "http",
+    "url": "http://localhost:3000"
+  }
+}
+```
+
+**Step 3: Verify integration**
+
+In Copilot CLI, the following tools will be available:
+- `knowledge-add` - Add documents to knowledge base
+- `knowledge-search` - Search with natural language queries
+- `knowledge-show` - List all documents
+- `knowledge-remove` - Remove documents
+- `knowledge-clear` - Clear knowledge base
+- `knowledge-status` - Get statistics
+- `knowledge-task-status` - Check processing status
+
+**Example usage in Copilot CLI:**
+```bash
+# Ask Copilot to use the knowledge base
+> knowledge-add /path/to/document.pdf
+> What are the security best practices from the document?
+```
 
 ## Architecture
 
-- **Vector Database**: ChromaDB for semantic search
+- **Vector Database**: ChromaDB for semantic search with persistent storage
 - **Embedding Model**: all-MiniLM-L6-v2 (384 dimensions, fast inference)
 - **OCR Engine**: Tesseract for scanned documents
-- **Protocol**: MCP over stdio for AI assistant integration
+- **Protocol**: MCP over HTTP (Streamable HTTP) and stdio transports
+- **Server Framework**: FastMCP for HTTP endpoint management
 
 ## Performance
 
@@ -287,7 +328,10 @@ KnowledgeMCP/
 
 ## Documentation
 
+- [Changelog](CHANGELOG.md) - Version history and recent changes
 - [Implementation Progress](IMPLEMENTATION_PROGRESS.md) - Detailed progress report
+- [Configuration Guide](docs/CONFIGURATION.md) - Complete configuration reference
+- [Server Management](docs/SERVER_MANAGEMENT.md) - Server lifecycle management
 - [Specification](specs/001-mcp-knowledge-server/spec.md) - Feature specification
 - [Implementation Plan](specs/001-mcp-knowledge-server/plan.md) - Technical plan
 - [Tasks](specs/001-mcp-knowledge-server/tasks.md) - Task breakdown

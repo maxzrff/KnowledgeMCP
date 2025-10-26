@@ -30,6 +30,6 @@ processing:
 
 # MCP server settings
 mcp:
-  host: 0.0.0.0                          # Server host (0.0.0.0 or 127.0.0.1)
+  host: 127.0.0.1                        # Server host (127.0.0.1 for localhost only)
   port: 3000                             # Server port (1024-65535)
-  transport: http                        # Transport: http or websocket
+  transport: http-streamable             # Transport: http-streamable (recommended), http (SSE), or stdio

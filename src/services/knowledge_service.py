@@ -40,6 +40,51 @@ class KnowledgeService:
         self.vector_store = VectorStore(self.settings.storage.vector_db_path)
         self._tasks: dict[str, ProcessingTask] = {}
         self._documents: dict[str, Document] = {}
+        self._load_existing_documents()
+
+    def _load_existing_documents(self):
+        """Load existing documents from vector store on initialization."""
+        try:
+            # Get all unique document IDs from vector store
+            all_data = self.vector_store.get_all_documents()
+            
+            # Group by document_id to reconstruct Document objects
+            doc_map = {}
+            for metadata in all_data.get("metadatas", []):
+                doc_id = metadata.get("document_id")
+                if not doc_id or doc_id in doc_map:
+                    continue
+                    
+                doc_map[doc_id] = metadata
+            
+            # Recreate Document objects
+            for doc_id, metadata in doc_map.items():
+                # Count chunks for this document
+                chunk_count = sum(1 for m in all_data.get("metadatas", []) if m.get("document_id") == doc_id)
+                
+                # Get size_bytes, use 1 as default to pass validation (actual size unknown for old data)
+                size_bytes = metadata.get("size_bytes")
+                if not size_bytes or size_bytes == 0:
+                    size_bytes = 1  # Placeholder for legacy data
+                
+                # Reconstruct document
+                doc = Document(
+                    id=doc_id,
+                    filename=metadata.get("filename", "unknown"),
+                    file_path=metadata.get("file_path", ""),
+                    content_hash=metadata.get("content_hash", ""),
+                    format=DocumentFormat(metadata.get("format", "pdf")),
+                    size_bytes=size_bytes,
+                    metadata={},
+                    processing_status=ProcessingStatus.COMPLETED,
+                    chunk_count=chunk_count,
+                )
+                self._documents[doc_id] = doc
+                
+            if self._documents:
+                logger.info(f"Loaded {len(self._documents)} existing documents from vector store")
+        except Exception as e:
+            logger.warning(f"Could not load existing documents: {e}")
 
     def _calculate_file_hash(self, file_path: Path) -> str:
         """Calculate SHA-256 hash of file content."""
@@ -178,6 +223,9 @@ class KnowledgeService:
                 {
                     "document_id": document.id,
                     "filename": document.filename,
+                    "file_path": document.file_path,
+                    "content_hash": document.content_hash,
+                    "size_bytes": document.size_bytes,
                     "chunk_index": i,
                     "format": document.format.value,
                     "processing_method": (
@@ -295,11 +343,17 @@ class KnowledgeService:
             logger.warning(f"Document not found: {document_id}")
             return False
 
-        # Remove embeddings from vector store
+        # Remove embeddings from vector store by querying with document_id filter
         collection = self.vector_store.get_or_create_collection("knowledge_base_documents")
-        if document.embedding_ids:
-            collection.delete(ids=document.embedding_ids)
-            logger.info(f"Removed {len(document.embedding_ids)} embeddings")
+        try:
+            # Get all embeddings for this document
+            results = collection.get(where={"document_id": document_id})
+            if results and results.get("ids"):
+                embedding_ids = results["ids"]
+                collection.delete(ids=embedding_ids)
+                logger.info(f"Removed {len(embedding_ids)} embeddings for document {document_id}")
+        except Exception as e:
+            logger.error(f"Error removing embeddings for document {document_id}: {e}")
 
         # Remove document
         del self._documents[document_id]

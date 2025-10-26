@@ -8,12 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.stdio import stdio_server
+from mcp.server.sse import SseServerTransport
+from starlette.applications import Starlette
+from starlette.routing import Route
 
 from mcp import types
 from mcp.server import Server
 from src.mcp.tools import ALL_TOOLS
 from src.services.knowledge_service import KnowledgeService
 from src.utils.logging_config import get_logger, setup_logging
+from src.config.settings import get_settings
 
 logger = get_logger(__name__)
 
@@ -44,34 +48,38 @@ class KnowledgeMCPServer:
         @self.app.call_tool()
         async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
             """Handle tool calls."""
-            try:
-                if name == "knowledge-add":
-                    result = await self._handle_add(arguments)
-                elif name == "knowledge-search":
-                    result = await self._handle_search(arguments)
-                elif name == "knowledge-show":
-                    result = await self._handle_show(arguments)
-                elif name == "knowledge-remove":
-                    result = await self._handle_remove(arguments)
-                elif name == "knowledge-clear":
-                    result = await self._handle_clear(arguments)
-                elif name == "knowledge-status":
-                    result = await self._handle_status(arguments)
-                elif name == "knowledge-task-status":
-                    result = await self._handle_task_status(arguments)
-                else:
-                    raise ValueError(f"Unknown tool: {name}")
+            return await self._handle_tool_call(name, arguments)
 
-                return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+    async def _handle_tool_call(self, name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
+        """Handle a tool call and return the result."""
+        try:
+            if name == "knowledge-add":
+                result = await self._handle_add(arguments)
+            elif name == "knowledge-search":
+                result = await self._handle_search(arguments)
+            elif name == "knowledge-show":
+                result = await self._handle_show(arguments)
+            elif name == "knowledge-remove":
+                result = await self._handle_remove(arguments)
+            elif name == "knowledge-clear":
+                result = await self._handle_clear(arguments)
+            elif name == "knowledge-status":
+                result = await self._handle_status(arguments)
+            elif name == "knowledge-task-status":
+                result = await self._handle_task_status(arguments)
+            else:
+                raise ValueError(f"Unknown tool: {name}")
 
-            except Exception as e:
-                logger.error(f"Tool call error: {e}", exc_info=True)
-                error_result = {
-                    "success": False,
-                    "error": str(type(e).__name__),
-                    "message": str(e),
-                }
-                return [types.TextContent(type="text", text=json.dumps(error_result, indent=2))]
+            return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        except Exception as e:
+            logger.error(f"Tool call error: {e}", exc_info=True)
+            error_result = {
+                "success": False,
+                "error": str(type(e).__name__),
+                "message": str(e),
+            }
+            return [types.TextContent(type="text", text=json.dumps(error_result, indent=2))]
 
     async def _handle_add(self, args: dict[str, Any]) -> dict[str, Any]:
         """Handle knowledge-add tool."""
@@ -227,20 +235,63 @@ class KnowledgeMCPServer:
 
     async def run(self) -> None:
         """Run the MCP server."""
+        settings = get_settings()
         logger.info("Starting MCP Knowledge Server...")
-        async with stdio_server() as (read_stream, write_stream):
-            await self.app.run(
-                read_stream,
-                write_stream,
-                self.app.create_initialization_options(),
+        
+        if settings.mcp.transport == "http":
+            # HTTP transport using SSE
+            logger.info(f"Starting HTTP server on {settings.mcp.host}:{settings.mcp.port}")
+            
+            sse = SseServerTransport("/messages")
+            
+            async def handle_sse(request):
+                async with sse.connect_sse(
+                    request.scope, request.receive, request._send
+                ) as streams:
+                    await self.app.run(
+                        streams[0], streams[1], self.app.create_initialization_options()
+                    )
+            
+            starlette_app = Starlette(
+                debug=True,
+                routes=[
+                    Route("/messages", endpoint=handle_sse),
+                ],
             )
+            
+            import uvicorn
+            config = uvicorn.Config(
+                starlette_app,
+                host=settings.mcp.host,
+                port=settings.mcp.port,
+                log_level="info"
+            )
+            server = uvicorn.Server(config)
+            await server.serve()
+        else:
+            # STDIO transport (default)
+            async with stdio_server() as (read_stream, write_stream):
+                await self.app.run(
+                    read_stream,
+                    write_stream,
+                    self.app.create_initialization_options(),
+                )
 
 
 async def main():
     """Main entry point."""
     setup_logging(level="INFO")
-    server = KnowledgeMCPServer()
-    await server.run()
+    settings = get_settings()
+    
+    if settings.mcp.transport == "http-streamable":
+        # Use HTTP Streamable transport
+        from src.mcp.http_server import HTTPStreamableServer
+        server = HTTPStreamableServer()
+        await server.run()
+    else:
+        # Use default transports (STDIO or SSE)
+        server = KnowledgeMCPServer()
+        await server.run()
 
 
 if __name__ == "__main__":
