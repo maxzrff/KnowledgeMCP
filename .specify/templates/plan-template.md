@@ -31,7 +31,16 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify compliance with `.specify/memory/constitution.md`:
+
+- **Code Quality Standards**: Linting/formatting configured? Documentation plan in place?
+- **Testing Standards**: Test coverage targets defined? Test types identified (unit/integration/e2e)?
+- **User Experience Consistency**: Design system referenced? Accessibility requirements captured?
+- **Performance Requirements**: Performance budgets defined (response time, page load, query time)?
+
+**Quality Gates**: All gates listed in constitution must be addressed in this plan.
+
+*Document any justified deviations in Complexity Tracking section below.*
 
 ## Project Structure
 

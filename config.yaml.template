@@ -1,0 +1,34 @@
+# MCP Knowledge Server - Configuration Template
+#
+# Copy this file to config.yaml.local for custom configuration
+# Usage: cp config.yaml.template config.yaml.local
+
+# Storage paths
+storage:
+  documents_path: ./data/documents
+  vector_db_path: ./data/chromadb
+  model_cache_path: ~/.cache/huggingface
+
+# Embedding settings
+embedding:
+  model_name: sentence-transformers/all-MiniLM-L6-v2  # Or all-mpnet-base-v2 for better quality
+  batch_size: 32                         # Increase for faster processing (needs more RAM)
+  device: cpu                            # Change to 'cuda' if you have NVIDIA GPU
+
+# Chunking settings  
+chunking:
+  chunk_size: 500                        # 100-2000 characters
+  chunk_overlap: 50                      # Helps maintain context
+  strategy: sentence                     # sentence (recommended), paragraph, or fixed
+
+# Processing settings
+processing:
+  max_concurrent_tasks: 3                # Adjust based on CPU cores
+  ocr_confidence_threshold: 0.6          # 0.0-1.0
+  max_file_size_mb: 100                  # Maximum document size
+
+# MCP server settings
+mcp:
+  host: 0.0.0.0                          # Use 127.0.0.1 for local-only
+  port: 3000
+  transport: http                        # http or websocket

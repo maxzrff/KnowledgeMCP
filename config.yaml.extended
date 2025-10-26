@@ -1,0 +1,211 @@
+# MCP Knowledge Server - Configuration File
+# 
+# This is the default configuration. Copy this file to config.yaml
+# in the project root and customize as needed.
+#
+# Note: Environment variables take precedence over this file.
+# Format: KNOWLEDGE_<SECTION>__<KEY>=value
+# Example: KNOWLEDGE_STORAGE__DOCUMENTS_PATH=/custom/path
+
+# Storage Configuration
+storage:
+  # Path where uploaded documents are stored
+  documents_path: ./data/documents
+  
+  # Path for ChromaDB vector database
+  vector_db_path: ./data/chromadb
+  
+  # Cache directory for downloaded models
+  model_cache_path: ~/.cache/huggingface
+
+# Embedding Model Configuration
+embedding:
+  # HuggingFace model name for embeddings
+  # all-MiniLM-L6-v2: Fast, 384 dimensions, good quality
+  # Other options:
+  #   - all-mpnet-base-v2: Better quality, 768 dimensions, slower
+  #   - paraphrase-multilingual-MiniLM-L12-v2: Multi-language support
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+  
+  # Batch size for embedding generation
+  # Higher = faster but more memory
+  batch_size: 32
+  
+  # Device for model inference
+  # Options: cpu, cuda, mps (for Apple Silicon)
+  device: cuda
+
+# Text Chunking Configuration
+chunking:
+  # Target chunk size in characters
+  # Larger chunks = more context, fewer chunks
+  # Smaller chunks = more precise, more chunks
+  chunk_size: 500
+  
+  # Overlap between chunks in characters
+  # Helps maintain context across chunk boundaries
+  chunk_overlap: 50
+  
+  # Chunking strategy
+  # Options: sentence, paragraph, fixed
+  # - sentence: Smart splitting on sentence boundaries
+  # - paragraph: Split on paragraph breaks
+  # - fixed: Fixed character length
+  strategy: sentence
+
+# Document Processing Configuration
+processing:
+  # Maximum number of concurrent document processing tasks
+  max_concurrent_tasks: 3
+  
+  # OCR confidence threshold (0.0 to 1.0)
+  # Text below this confidence will trigger warnings
+  ocr_confidence_threshold: 0.6
+  
+  # Maximum file size in megabytes
+  # Files larger than this will be rejected
+  max_file_size_mb: 100
+  
+  # Supported document formats
+  # Automatically detected, listed here for reference
+  supported_formats:
+    - pdf
+    - docx
+    - pptx
+    - xlsx
+    - html
+    - htm
+    - jpg
+    - jpeg
+    - png
+    - svg
+
+# MCP Server Configuration
+mcp:
+  # Server host (0.0.0.0 for all interfaces, 127.0.0.1 for local only)
+  host: 0.0.0.0
+  
+  # Server port (only used for HTTP transport)
+  port: 3000
+  
+  # Transport protocol
+  # Options: stdio (recommended for MCP), http (for testing)
+  transport: stdio
+  
+  # Enable CORS for HTTP transport (development only)
+  cors_enabled: false
+  
+  # Allowed origins for CORS
+  cors_origins:
+    - http://localhost:3000
+    - http://127.0.0.1:3000
+
+# Logging Configuration
+logging:
+  # Log level
+  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: INFO
+  
+  # Log file path (optional, logs to stdout if not specified)
+  # file: ./mcp_server.log
+  
+  # Log format
+  # Options: json, text
+  format: text
+  
+  # Enable detailed logging for debugging
+  debug: false
+
+# Search Configuration
+search:
+  # Default number of results to return
+  default_top_k: 10
+  
+  # Maximum number of results allowed
+  max_top_k: 50
+  
+  # Default minimum relevance score (0.0 to 1.0)
+  default_min_relevance: 0.0
+  
+  # Enable search result highlighting
+  enable_highlighting: true
+
+# Performance Configuration
+performance:
+  # Enable embedding cache for faster repeated queries
+  cache_embeddings: true
+  
+  # Cache size limit (number of embeddings)
+  cache_size: 1000
+  
+  # Enable lazy loading of models
+  lazy_load_models: true
+  
+  # Connection pool size for vector database
+  db_pool_size: 5
+
+# Security Configuration (for production)
+security:
+  # Enable authentication (requires implementation)
+  enable_auth: false
+  
+  # Allowed file extensions (whitelist)
+  allowed_extensions:
+    - .pdf
+    - .docx
+    - .pptx
+    - .xlsx
+    - .html
+    - .htm
+    - .jpg
+    - .jpeg
+    - .png
+    - .svg
+  
+  # Maximum documents per knowledge base
+  max_documents: 10000
+  
+  # Enable content scanning (requires implementation)
+  scan_uploads: false
+
+# Feature Flags
+features:
+  # Enable OCR for scanned documents
+  enable_ocr: true
+  
+  # Enable image analysis (requires additional models)
+  enable_image_analysis: false
+  
+  # Enable async processing
+  enable_async: true
+  
+  # Enable progress tracking
+  enable_progress: true
+  
+  # Enable metadata extraction
+  enable_metadata: true
+
+# Development Configuration
+development:
+  # Enable debug mode (verbose logging, no caching)
+  debug_mode: false
+  
+  # Enable hot reload (for development)
+  hot_reload: false
+  
+  # Enable performance profiling
+  profiling: false
+  
+  # Mock external services
+  mock_services: false
+
+# Example: Using environment variables
+# 
+# Instead of editing this file, you can set environment variables:
+#
+# export KNOWLEDGE_STORAGE__DOCUMENTS_PATH=/custom/path
+# export KNOWLEDGE_EMBEDDING__BATCH_SIZE=64
+# export KNOWLEDGE_LOGGING__LEVEL=DEBUG
+# export KNOWLEDGE_SEARCH__DEFAULT_TOP_K=20
+#
+# Environment variables override settings in this file.
