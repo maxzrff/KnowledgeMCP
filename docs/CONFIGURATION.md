@@ -217,6 +217,43 @@ export KNOWLEDGE_SEARCH__DEFAULT_TOP_K=20
 export KNOWLEDGE_SEARCH__MAX_TOP_K=100
 ```
 
+### Context Configuration
+
+Controls multi-context organization features.
+
+```yaml
+contexts:
+  # Default context name (used when no context specified)
+  default_context: default
+  
+  # ChromaDB collection name prefix
+  collection_prefix: knowledge_
+  
+  # Context name validation pattern
+  name_pattern: "^[a-zA-Z0-9_-]{1,64}$"
+  
+  # Maximum number of contexts allowed
+  max_contexts: 100
+```
+
+**Context Naming:**
+- Context names must be 1-64 characters
+- Allowed characters: alphanumeric, dash, underscore
+- Case-insensitive (normalized to lowercase)
+- "default" is reserved and auto-created
+
+**ChromaDB Collections:**
+- Each context gets its own ChromaDB collection
+- Collection name format: `{collection_prefix}{context_name}`
+- Example: `knowledge_aws-docs`, `knowledge_healthcare`
+
+**Environment Variables:**
+```bash
+export KNOWLEDGE_CONTEXTS__DEFAULT_CONTEXT=default
+export KNOWLEDGE_CONTEXTS__COLLECTION_PREFIX=knowledge_
+export KNOWLEDGE_CONTEXTS__MAX_CONTEXTS=200
+```
+
 ### Performance Configuration
 
 Controls caching and optimization.
@@ -370,6 +407,41 @@ processing:
 performance:
   cache_embeddings: false
   lazy_load_models: true
+```
+
+### Multi-Context Organization Setup
+
+Organize documents by domain or project:
+
+```yaml
+contexts:
+  default_context: default
+  collection_prefix: knowledge_
+  max_contexts: 100
+
+# Create contexts via MCP tools:
+# knowledge-context-create aws-docs --description "AWS architecture documentation"
+# knowledge-context-create healthcare --description "Medical compliance documents"
+# knowledge-context-create project-alpha --description "Project Alpha technical docs"
+
+# Add documents to specific contexts:
+# knowledge-add /path/to/wafr.pdf --contexts aws-docs
+# knowledge-add /path/to/hipaa.pdf --contexts healthcare
+# knowledge-add /path/to/shared-doc.pdf --contexts aws-docs,healthcare
+
+# Search within a context:
+# knowledge-search "security best practices" --context aws-docs
+```
+
+**Benefits:**
+- Faster search (smaller search space per context)
+- More relevant results (domain-focused)
+- Better organization (documents grouped by topic)
+- Multi-domain support (same doc in multiple contexts)
+
+**Environment Variables:**
+```bash
+export KNOWLEDGE_CONTEXTS__MAX_CONTEXTS=200
 ```
 
 ## Validation

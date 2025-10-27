@@ -7,6 +7,7 @@ A Model Context Protocol (MCP) server that enables AI coding assistants and agen
 ## Features
 
 - ✅ **Semantic Search**: Natural language queries over your document collection
+- ✅ **Multi-Context Support**: Organize documents into separate contexts for focused search
 - ✅ **Multi-Format Support**: PDF, DOCX, PPTX, XLSX, HTML, and images (JPG, PNG, SVG)
 - ✅ **Smart OCR**: Automatically detects scan-only PDFs and applies OCR when needed
 - ✅ **Async Processing**: Background indexing with progress tracking
@@ -14,6 +15,76 @@ A Model Context Protocol (MCP) server that enables AI coding assistants and agen
 - ✅ **HTTP & Stdio Transports**: Compatible with GitHub Copilot CLI and Claude Desktop
 - ✅ **MCP Integration**: Compatible with Claude Desktop, GitHub Copilot, and other MCP clients
 - ✅ **Local & Private**: All processing happens locally, no data leaves your system
+
+## Multi-Context Organization
+
+Organize your documents into separate contexts for better organization and focused search results.
+
+### What are Contexts?
+
+Contexts are isolated knowledge domains that let you:
+- **Organize by Topic**: Separate AWS docs from healthcare docs from project-specific docs
+- **Search Efficiently**: Search within a specific context for faster, more relevant results
+- **Multi-Domain Documents**: Add the same document to multiple contexts
+- **Flexible Organization**: Each context is a separate ChromaDB collection
+
+### Creating and Using Contexts
+
+```python
+from src.services.context_service import ContextService
+
+# Create contexts
+context_service = ContextService()
+await context_service.create_context("aws-architecture", "AWS WAFR and architecture docs")
+await context_service.create_context("healthcare", "Medical and compliance documents")
+
+# Add documents to specific contexts
+doc_id = await service.add_document(
+    Path("wafr.pdf"),
+    contexts=["aws-architecture"]
+)
+
+# Add to multiple contexts
+doc_id = await service.add_document(
+    Path("fin-services-lens.pdf"),
+    contexts=["aws-architecture", "healthcare"]
+)
+
+# Search within a context
+results = await service.search("security pillar", context="aws-architecture")
+
+# Search across all contexts
+results = await service.search("best practices")  # No context = search all
+```
+
+### MCP Context Tools
+
+```bash
+# Create context
+knowledge-context-create aws-docs --description "AWS documentation"
+
+# List all contexts
+knowledge-context-list
+
+# Show context details
+knowledge-context-show aws-docs
+
+# Add document to context
+knowledge-add /path/to/doc.pdf --contexts aws-docs
+
+# Add to multiple contexts
+knowledge-add /path/to/doc.pdf --contexts aws-docs,healthcare
+
+# Search in specific context
+knowledge-search "security" --context aws-docs
+
+# Delete context
+knowledge-context-delete test-context --confirm true
+```
+
+### Default Context
+
+All documents without a specified context go to the "default" context automatically. This ensures backward compatibility with existing workflows.
 
 ## Smart OCR Processing
 
@@ -135,23 +206,29 @@ async def main():
     # Initialize service
     service = KnowledgeService()
     
-    # Add document
+    # Add document to specific context
     doc_id = await service.add_document(
         Path("document.pdf"),
         metadata={"category": "technical"},
+        contexts=["aws-docs"],  # Optional: organize by context
         async_processing=False
     )
     
-    # Search
-    results = await service.search("neural networks", top_k=5)
+    # Search within a context (faster, more focused)
+    results = await service.search("neural networks", context="aws-docs", top_k=5)
     for result in results:
         print(f"{result['filename']}: {result['relevance_score']:.2f}")
+        print(f"  Context: {result.get('context', 'default')}")
         print(f"  {result['chunk_text'][:100]}...")
+    
+    # Search across all contexts
+    all_results = await service.search("neural networks", top_k=5)
     
     # Get statistics
     stats = service.get_statistics()
     print(f"\nDocuments: {stats['document_count']}")
     print(f"Chunks: {stats['total_chunks']}")
+    print(f"Contexts: {stats['context_count']}")
 
 asyncio.run(main())
 ```
@@ -192,15 +269,22 @@ python tests/e2e_demo.py
 
 ## MCP Tools Available
 
-The server exposes 7 MCP tools for AI assistants:
+The server exposes 11 MCP tools for AI assistants:
 
-1. **knowledge-add**: Add documents to knowledge base
-2. **knowledge-search**: Semantic search with natural language queries
-3. **knowledge-show**: List all documents
+### Document Management
+1. **knowledge-add**: Add documents to knowledge base (with optional context assignment)
+2. **knowledge-search**: Semantic search with natural language queries (context-aware)
+3. **knowledge-show**: List all documents (filterable by context)
 4. **knowledge-remove**: Remove specific documents
 5. **knowledge-clear**: Clear entire knowledge base
 6. **knowledge-status**: Get statistics and health status
 7. **knowledge-task-status**: Check async processing task status
+
+### Context Management
+8. **knowledge-context-create**: Create a new context for organizing documents
+9. **knowledge-context-list**: List all contexts with statistics
+10. **knowledge-context-show**: Show details of a specific context
+11. **knowledge-context-delete**: Delete a context (documents remain in other contexts)
 
 ## Configuration
 
@@ -293,6 +377,8 @@ export KNOWLEDGE_EMBEDDING__DEVICE=cuda
 | `device` | Computation device | cpu | Use 'cuda' for GPU |
 | `max_file_size_mb` | Max file size | 100 | Increase for large docs |
 | `log_level` | Logging verbosity | INFO | Use DEBUG for development |
+| `collection_prefix` | ChromaDB collection prefix | knowledge_ | Used for context collections |
+| `default_context` | Default context name | default | Backward compatibility |
 
 ## Integration with AI Assistants
 
@@ -352,9 +438,17 @@ In Copilot CLI, the following tools will be available:
 
 **Example usage in Copilot CLI:**
 ```bash
+# Create organized contexts
+> knowledge-context-create aws-docs --description "AWS architecture documents"
+
+# Add documents to specific contexts
+> knowledge-add /path/to/wafr.pdf --contexts aws-docs
+
+# Search within a context for focused results
+> knowledge-search "security pillar" --context aws-docs
+
 # Ask Copilot to use the knowledge base
-> knowledge-add /path/to/document.pdf
-> What are the security best practices from the document?
+> What are the AWS WAFR security best practices?
 ```
 
 ## Architecture
@@ -442,22 +536,31 @@ mypy src/
 - Multi-format document ingestion
 - Intelligent text extraction vs OCR
 - Async processing with progress tracking
+- Multi-context assignment
 
 ✅ **US2**: Search Knowledge Semantically  
 - Natural language queries
 - Relevance-ranked results
 - Fast semantic search
+- Context-scoped and cross-context search
 
 ✅ **US3**: Manage Knowledge Base  
 - List all documents
 - Remove specific documents
 - Clear knowledge base
 - View statistics
+- Context filtering
 
 ✅ **US4**: Integrate with AI Tools via MCP  
-- 7 MCP tools implemented
+- 11 MCP tools implemented (7 document + 4 context tools)
 - JSON-RPC compatible
 - Ready for AI assistant integration
+
+✅ **US5**: Multi-Context Organization  
+- Create and manage contexts
+- Add documents to multiple contexts
+- Search within specific contexts
+- Context isolation with separate ChromaDB collections
 
 ## License
 

@@ -8,7 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- HTTP transport support via FastMCP for GitHub Copilot CLI integration
+- **Multi-Context Support** (v0.3.0)
+  - Organize documents into separate contexts for better organization
+  - 4 new MCP tools: `knowledge-context-create`, `knowledge-context-list`, `knowledge-context-show`, `knowledge-context-delete`
+  - Context-scoped search for faster, more relevant results
+  - Documents can belong to multiple contexts simultaneously
+  - Each context uses a separate ChromaDB collection for isolation
+  - Default context ensures backward compatibility
+  - Updated `knowledge-add`, `knowledge-search`, `knowledge-show` tools with context parameter
+- Smart OCR Implementation (v0.2.0)
+  - Automatic detection of scan-only PDFs
+  - OCR applied only when text extraction fails or produces poor results
+  - Force OCR mode for always applying OCR
+  - Processing method tracking (text_extraction, ocr, image_analysis)
+  - OCR confidence scores in document metadata
+- HTTP transport support via FastMCP for GitHub Copilot CLI integration (v0.1.1)
 - Streamable HTTP endpoint at `http://localhost:3000`
 - Server management script (`server.sh`) for start/stop/status/logs operations
 - Comprehensive configuration documentation in `docs/CONFIGURATION.md`
@@ -24,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server now automatically detects transport mode (HTTP vs stdio)
 - Improved logging for document removal operations
 - Updated README with GitHub Copilot CLI configuration examples
+- Updated README with multi-context organization examples
+- Tool count increased from 7 to 11 (7 document + 4 context tools)
 
 ## [0.1.0] - 2025-10-26
 
