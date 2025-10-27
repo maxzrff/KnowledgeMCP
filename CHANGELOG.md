@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-10-27
+
 ### Added
-- **Multi-Context Support** (v0.3.0)
+- **Multi-Context Support**
   - Organize documents into separate contexts for better organization
   - 4 new MCP tools: `knowledge-context-create`, `knowledge-context-list`, `knowledge-context-show`, `knowledge-context-delete`
   - Context-scoped search for faster, more relevant results
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Each context uses a separate ChromaDB collection for isolation
   - Default context ensures backward compatibility
   - Updated `knowledge-add`, `knowledge-search`, `knowledge-show` tools with context parameter
+  - Multiple files can be added to the same context
 - Smart OCR Implementation (v0.2.0)
   - Automatic detection of scan-only PDFs
   - OCR applied only when text extraction fails or produces poor results
@@ -27,12 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server management script (`server.sh`) for start/stop/status/logs operations
 - Comprehensive configuration documentation in `docs/CONFIGURATION.md`
 - Server management guide in `docs/SERVER_MANAGEMENT.md`
+- MIT License
 
 ### Fixed
 - **Critical**: Document removal now persists across server restarts
   - Root cause: `remove_document()` relied on cached `embedding_ids` that weren't available after server restart
   - Solution: Query ChromaDB directly by `document_id` filter to find and delete all embeddings
   - Impact: Removed documents no longer reappear after server restart
+- Context-related tools now properly available when server runs in HTTP mode
 
 ### Changed
 - Server now automatically detects transport mode (HTTP vs stdio)
@@ -40,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated README with GitHub Copilot CLI configuration examples
 - Updated README with multi-context organization examples
 - Tool count increased from 7 to 11 (7 document + 4 context tools)
+- Enhanced documentation with multi-context usage examples
 
 ## [0.1.0] - 2025-10-26
 
