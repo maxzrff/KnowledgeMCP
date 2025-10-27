@@ -12,6 +12,7 @@ from src.processors.image_processor import ImageProcessor
 from src.processors.pdf_processor import PDFProcessor
 from src.processors.pptx_processor import PPTXProcessor
 from src.processors.xlsx_processor import XLSXProcessor
+from src.services.ocr_service import OCRService
 from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -20,9 +21,20 @@ logger = get_logger(__name__)
 class TextExtractor:
     """Service for extracting text from various document formats."""
 
-    def __init__(self):
+    def __init__(self, force_ocr: bool = False, ocr_language: str = "eng"):
+        """
+        Initialize text extractor with OCR support.
+
+        Args:
+            force_ocr: Force OCR processing even when text extraction is available
+            ocr_language: Language code for OCR processing
+        """
+        # Initialize OCR service
+        self.ocr_service = OCRService(language=ocr_language, force_ocr=force_ocr)
+
+        # Initialize processors with OCR support
         self._processors = {
-            DocumentFormat.PDF: PDFProcessor(),
+            DocumentFormat.PDF: PDFProcessor(ocr_service=self.ocr_service),
             DocumentFormat.DOCX: DOCXProcessor(),
             DocumentFormat.PPTX: PPTXProcessor(),
             DocumentFormat.XLSX: XLSXProcessor(),

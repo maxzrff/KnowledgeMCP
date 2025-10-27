@@ -55,6 +55,16 @@ class ProcessingSettings(BaseSettings):
     max_file_size_mb: int = Field(default=100, ge=1, le=1000)
 
 
+class OCRSettings(BaseSettings):
+    """OCR processing configuration."""
+
+    enabled: bool = True
+    language: str = "eng"
+    force_ocr: bool = False
+    # Accept all results per requirements (threshold not enforced)
+    confidence_threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class MCPSettings(BaseSettings):
     """MCP server configuration."""
 
@@ -76,6 +86,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
     processing: ProcessingSettings = Field(default_factory=ProcessingSettings)
+    ocr: OCRSettings = Field(default_factory=OCRSettings)
     mcp: MCPSettings = Field(default_factory=MCPSettings)
 
     @classmethod

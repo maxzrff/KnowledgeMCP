@@ -31,7 +31,10 @@ class KnowledgeService:
 
     def __init__(self):
         self.settings = get_settings()
-        self.text_extractor = TextExtractor()
+        self.text_extractor = TextExtractor(
+            force_ocr=self.settings.ocr.force_ocr,
+            ocr_language=self.settings.ocr.language,
+        )
         self.embedding_service = EmbeddingService(
             model_name=self.settings.embedding.model_name,
             device=self.settings.embedding.device,
@@ -99,6 +102,7 @@ class KnowledgeService:
         file_path: Path,
         metadata: dict[str, Any] | None = None,
         async_processing: bool = True,
+        force_ocr: bool = False,
     ) -> str:
         """
         Add a document to the knowledge base.
@@ -107,6 +111,7 @@ class KnowledgeService:
             file_path: Path to the document file
             metadata: Optional metadata dictionary
             async_processing: If True, process asynchronously and return task ID
+            force_ocr: Force OCR even if text extraction is available
 
         Returns:
             Task ID if async, document ID if sync
@@ -143,15 +148,17 @@ class KnowledgeService:
             self._tasks[task.task_id] = task
 
             # Start processing in background
-            asyncio.create_task(self._process_document_async(task.task_id, document))
+            asyncio.create_task(
+                self._process_document_async(task.task_id, document, force_ocr)
+            )
 
             logger.info(f"Document queued for async processing: {file_path.name}")
             return task.task_id
         # Process synchronously
-        await self._process_document(document)
+        await self._process_document(document, force_ocr)
         return document.id
 
-    async def _process_document_async(self, task_id: str, document: Document) -> None:
+    async def _process_document_async(self, task_id: str, document: Document, force_ocr: bool = False) -> None:
         """Process document asynchronously with progress tracking."""
         task = self._tasks[task_id]
         task.status = TaskStatus.RUNNING
@@ -161,7 +168,7 @@ class KnowledgeService:
             task.completed_steps = 1
             task.progress = 0.25
 
-            await self._process_document(document)
+            await self._process_document(document, force_ocr)
 
             task.status = TaskStatus.COMPLETED
             task.progress = 1.0
@@ -174,86 +181,96 @@ class KnowledgeService:
             document.error_message = str(e)
             logger.error(f"Document processing failed: {e}")
 
-    async def _process_document(self, document: Document) -> None:
+    async def _process_document(self, document: Document, force_ocr: bool = False) -> None:
         """Process a single document."""
         document.processing_status = ProcessingStatus.PROCESSING
 
-        # Extract text
-        text, metadata, processing_method = await self.text_extractor.extract(
-            Path(document.file_path),
-            document.format,
-        )
+        # Temporarily override force_ocr setting if requested
+        original_force_ocr = self.text_extractor.ocr_service.force_ocr
+        if force_ocr:
+            self.text_extractor.ocr_service.force_ocr = True
 
-        document.processing_method = processing_method
-        document.metadata.update(metadata)
-
-        if not text or len(text.strip()) < 10:
-            logger.warning(f"No text extracted from {document.filename}")
-            document.processing_status = ProcessingStatus.COMPLETED
-            return
-
-        # Chunk text
-        chunks = chunk_text(
-            text,
-            strategy=self.settings.chunking.strategy,
-            chunk_size=self.settings.chunking.chunk_size,
-            overlap=self.settings.chunking.chunk_overlap,
-        )
-
-        if not chunks:
-            logger.warning(f"No chunks created from {document.filename}")
-            document.processing_status = ProcessingStatus.COMPLETED
-            return
-
-        # Generate embeddings
-        embeddings = await self.embedding_service.encode(
-            chunks,
-            batch_size=self.settings.embedding.batch_size,
-        )
-
-        # Store in vector database
-        embedding_ids = []
-        embedding_metadatas = []
-
-        for i, (_chunk, _embedding_vector) in enumerate(zip(chunks, embeddings, strict=True)):
-            embedding_id = str(uuid4())
-            embedding_ids.append(embedding_id)
-
-            embedding_metadatas.append(
-                {
-                    "document_id": document.id,
-                    "filename": document.filename,
-                    "file_path": document.file_path,
-                    "content_hash": document.content_hash,
-                    "size_bytes": document.size_bytes,
-                    "chunk_index": i,
-                    "format": document.format.value,
-                    "processing_method": (
-                        document.processing_method.value
-                        if document.processing_method
-                        else "unknown"
-                    ),
-                }
+        try:
+            # Extract text
+            text, metadata, processing_method = await self.text_extractor.extract(
+                Path(document.file_path),
+                document.format,
             )
 
-        # Add to vector store
-        await self.vector_store.add_embeddings(
-            collection_name="knowledge_base_documents",
-            ids=embedding_ids,
-            embeddings=embeddings,
-            documents=chunks,
-            metadatas=embedding_metadatas,
-        )
+            document.processing_method = processing_method
+            document.metadata.update(metadata)
 
-        # Update document
-        document.chunk_count = len(chunks)
-        document.embedding_ids = embedding_ids
-        document.processing_status = ProcessingStatus.COMPLETED
+            if not text or len(text.strip()) < 10:
+                logger.warning(f"No text extracted from {document.filename}")
+                document.processing_status = ProcessingStatus.COMPLETED
+                return
 
-        logger.info(
-            f"Document processed: {document.filename} - "
-            f"{len(chunks)} chunks, {len(embeddings)} embeddings"
-        )
+            # Chunk text
+            chunks = chunk_text(
+                text,
+                strategy=self.settings.chunking.strategy,
+                chunk_size=self.settings.chunking.chunk_size,
+                overlap=self.settings.chunking.chunk_overlap,
+            )
+
+            if not chunks:
+                logger.warning(f"No chunks created from {document.filename}")
+                document.processing_status = ProcessingStatus.COMPLETED
+                return
+
+            # Generate embeddings
+            embeddings = await self.embedding_service.encode(
+                chunks,
+                batch_size=self.settings.embedding.batch_size,
+            )
+
+            # Store in vector database
+            embedding_ids = []
+            embedding_metadatas = []
+
+            for i, (_chunk, _embedding_vector) in enumerate(zip(chunks, embeddings, strict=True)):
+                embedding_id = str(uuid4())
+                embedding_ids.append(embedding_id)
+
+                embedding_metadatas.append(
+                    {
+                        "document_id": document.id,
+                        "filename": document.filename,
+                        "file_path": document.file_path,
+                        "content_hash": document.content_hash,
+                        "size_bytes": document.size_bytes,
+                        "chunk_index": i,
+                        "format": document.format.value,
+                        "processing_method": (
+                            document.processing_method.value
+                            if document.processing_method
+                            else "unknown"
+                        ),
+                    }
+                )
+
+            # Add to vector store
+            await self.vector_store.add_embeddings(
+                collection_name="knowledge_base_documents",
+                ids=embedding_ids,
+                embeddings=embeddings,
+                documents=chunks,
+                metadatas=embedding_metadatas,
+            )
+
+            # Update document
+            document.chunk_count = len(chunks)
+            document.embedding_ids = embedding_ids
+            document.processing_status = ProcessingStatus.COMPLETED
+
+            logger.info(
+                f"Document processed: {document.filename} - "
+                f"{len(chunks)} chunks, {len(embeddings)} embeddings"
+            )
+        finally:
+            # Restore original force_ocr setting
+            if force_ocr:
+                self.text_extractor.ocr_service.force_ocr = original_force_ocr
 
     def get_task_status(self, task_id: str) -> ProcessingTask | None:
         """Get status of processing task."""

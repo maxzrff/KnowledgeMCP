@@ -28,6 +28,13 @@ processing:
   ocr_confidence_threshold: 0.6          # OCR quality threshold (0.0-1.0)
   max_file_size_mb: 100                  # Maximum file size (1-1000 MB)
 
+# OCR settings
+ocr:
+  enabled: true                          # Enable OCR processing
+  language: eng                          # OCR language code (eng, fra, deu, etc.)
+  force_ocr: false                       # Force OCR even when text extraction is available
+  confidence_threshold: 0.0              # Accept all OCR results (per requirements)
+
 # MCP server settings
 mcp:
   host: 127.0.0.1                        # Server host (127.0.0.1 for localhost only)

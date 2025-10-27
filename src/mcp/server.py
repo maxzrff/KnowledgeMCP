@@ -86,11 +86,13 @@ class KnowledgeMCPServer:
         file_path = Path(args["file_path"])
         metadata = args.get("metadata", {})
         async_processing = args.get("async", True)
+        force_ocr = args.get("force_ocr", False)
 
         result_id = await self.knowledge_service.add_document(
             file_path,
             metadata=metadata,
             async_processing=async_processing,
+            force_ocr=force_ocr,
         )
 
         if async_processing:
@@ -98,6 +100,7 @@ class KnowledgeMCPServer:
                 "success": True,
                 "task_id": result_id,
                 "message": "Document queued for processing",
+                "force_ocr": force_ocr,
             }
         document = self.knowledge_service.get_document(result_id)
         return {
@@ -105,6 +108,7 @@ class KnowledgeMCPServer:
             "document_id": result_id,
             "filename": document.filename if document else None,
             "chunks_created": document.chunk_count if document else 0,
+            "processing_method": document.processing_method.value if document and document.processing_method else None,
         }
 
     async def _handle_search(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -142,7 +146,10 @@ class KnowledgeMCPServer:
                     "size_bytes": doc.size_bytes,
                     "chunk_count": doc.chunk_count,
                     "processing_status": doc.processing_status.value,
+                    "processing_method": doc.processing_method.value if doc.processing_method else None,
                     "date_added": doc.date_added.isoformat(),
+                    "ocr_used": doc.metadata.get("ocr_used", False),
+                    "ocr_confidence": doc.metadata.get("ocr_confidence"),
                 }
                 for doc in documents
             ],

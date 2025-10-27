@@ -8,12 +8,82 @@ A Model Context Protocol (MCP) server that enables AI coding assistants and agen
 
 - ✅ **Semantic Search**: Natural language queries over your document collection
 - ✅ **Multi-Format Support**: PDF, DOCX, PPTX, XLSX, HTML, and images (JPG, PNG, SVG)
-- ✅ **Intelligent OCR**: Automatic decision between text extraction and OCR
+- ✅ **Smart OCR**: Automatically detects scan-only PDFs and applies OCR when needed
 - ✅ **Async Processing**: Background indexing with progress tracking
 - ✅ **Persistent Storage**: ChromaDB vector store with reliable document removal
 - ✅ **HTTP & Stdio Transports**: Compatible with GitHub Copilot CLI and Claude Desktop
 - ✅ **MCP Integration**: Compatible with Claude Desktop, GitHub Copilot, and other MCP clients
 - ✅ **Local & Private**: All processing happens locally, no data leaves your system
+
+## Smart OCR Processing
+
+The server includes intelligent OCR capabilities that automatically detect when OCR is needed:
+
+### Automatic OCR Detection
+
+The system analyzes extracted text quality and automatically applies OCR when:
+- Extracted text is less than 100 characters (likely a scan)
+- Text has less than 70% alphanumeric characters (gibberish/encoding issues)
+
+### Force OCR Mode
+
+You can force OCR processing even when text extraction is available:
+
+```python
+# Python API
+doc_id = await service.add_document(
+    Path("document.pdf"),
+    force_ocr=True  # Force OCR regardless of text quality
+)
+
+# MCP Tool (via GitHub Copilot or Claude)
+knowledge-add /path/to/document.pdf --force_ocr=true
+```
+
+### OCR Requirements
+
+For OCR functionality, install Tesseract OCR:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install tesseract-ocr poppler-utils
+
+# macOS
+brew install tesseract poppler
+
+# Windows (via Chocolatey)
+choco install tesseract poppler
+```
+
+### OCR Configuration
+
+Configure OCR behavior in `config.yaml`:
+
+```yaml
+ocr:
+  enabled: true              # Enable/disable OCR
+  language: eng              # OCR language (eng, fra, deu, spa, etc.)
+  force_ocr: false           # Global force OCR setting
+  confidence_threshold: 0.0  # Accept all OCR results
+```
+
+### Processing Method Tracking
+
+All documents include metadata showing how they were processed:
+- `text_extraction`: Standard text extraction
+- `ocr`: OCR processing was used
+- `image_analysis`: Image-only documents
+
+Check processing method in document metadata:
+
+```python
+documents = service.list_documents()
+for doc in documents:
+    print(f"{doc.filename}: {doc.processing_method}")
+    if doc.metadata.get("ocr_used"):
+        confidence = doc.metadata.get("ocr_confidence", 0)
+        print(f"  OCR confidence: {confidence:.2f}")
+```
 
 ## Quick Start
 
@@ -157,6 +227,12 @@ chunking:
 processing:
   max_concurrent_tasks: 3
   max_file_size_mb: 100
+
+ocr:
+  enabled: true
+  language: eng
+  force_ocr: false
+  confidence_threshold: 0.0  # Accept all OCR results
 
 logging:
   level: INFO
