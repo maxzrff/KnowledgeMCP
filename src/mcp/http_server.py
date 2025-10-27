@@ -216,6 +216,14 @@ class HTTPStreamableServer:
                 return await self._handle_status(arguments)
             elif tool_name == "knowledge-task-status":
                 return await self._handle_task_status(arguments)
+            elif tool_name == "knowledge-context-create":
+                return await self._handle_context_create(arguments)
+            elif tool_name == "knowledge-context-list":
+                return await self._handle_context_list(arguments)
+            elif tool_name == "knowledge-context-show":
+                return await self._handle_context_show(arguments)
+            elif tool_name == "knowledge-context-delete":
+                return await self._handle_context_delete(arguments)
             else:
                 return None
         except Exception as e:
@@ -233,11 +241,18 @@ class HTTPStreamableServer:
         file_path = Path(args["file_path"])
         metadata = args.get("metadata", {})
         async_processing = args.get("async", True)
+        force_ocr = args.get("force_ocr", False)
+        contexts_str = args.get("contexts", "default")
+        
+        # Parse comma-separated contexts into a list
+        contexts = [ctx.strip() for ctx in contexts_str.split(",") if ctx.strip()]
 
         result_id = await self.knowledge_service.add_document(
             file_path,
             metadata=metadata,
             async_processing=async_processing,
+            force_ocr=force_ocr,
+            contexts=contexts,
         )
 
         if async_processing:
@@ -259,11 +274,13 @@ class HTTPStreamableServer:
         query = args["query"]
         top_k = args.get("top_k", 10)
         min_relevance = args.get("min_relevance", 0.0)
+        context = args.get("context")
 
         results = await self.knowledge_service.search(
             query=query,
             top_k=top_k,
             min_relevance=min_relevance,
+            context=context,
         )
 
         return {
@@ -276,11 +293,12 @@ class HTTPStreamableServer:
     async def _handle_show(self, args: dict[str, Any]) -> dict[str, Any]:
         """Handle knowledge-show tool."""
         limit = args.get("limit", 100)
-        documents = self.knowledge_service.list_documents()[:limit]
+        context = args.get("context")
+        documents = self.knowledge_service.list_documents(context=context)[:limit]
 
         return {
             "success": True,
-            "total_count": len(self.knowledge_service.list_documents()),
+            "total_count": len(self.knowledge_service.list_documents(context=context)),
             "documents": [
                 {
                     "id": doc.id,
@@ -378,6 +396,108 @@ class HTTPStreamableServer:
             "progress": task.progress,
             "current_step": task.current_step,
             "error": task.error,
+        }
+
+    async def _handle_context_create(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-create tool."""
+        name = args["name"]
+        description = args.get("description", "")
+        metadata = args.get("metadata", {})
+        
+        context = self.knowledge_service.create_context(
+            name=name,
+            description=description,
+            metadata=metadata,
+        )
+        
+        return {
+            "success": True,
+            "context": {
+                "name": context.name,
+                "description": context.description,
+                "created_at": context.created_at.isoformat(),
+            },
+        }
+
+    async def _handle_context_list(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-list tool."""
+        contexts = self.knowledge_service.list_contexts()
+        
+        return {
+            "success": True,
+            "total_count": len(contexts),
+            "contexts": [
+                {
+                    "name": ctx.name,
+                    "description": ctx.description,
+                    "document_count": ctx.document_count,
+                    "created_at": ctx.created_at.isoformat(),
+                }
+                for ctx in contexts
+            ],
+        }
+
+    async def _handle_context_show(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-show tool."""
+        name = args["name"]
+        context = self.knowledge_service.get_context(name)
+        
+        if not context:
+            return {
+                "success": False,
+                "error": "not_found",
+                "message": f"Context not found: {name}",
+            }
+        
+        # Get documents for this context
+        documents = self.knowledge_service.list_documents(context=name)
+        
+        return {
+            "success": True,
+            "context": {
+                "name": context.name,
+                "description": context.description,
+                "document_count": len(documents),
+                "created_at": context.created_at.isoformat(),
+                "documents": [
+                    {
+                        "id": doc.id,
+                        "filename": doc.filename,
+                        "format": doc.format.value,
+                        "size_bytes": doc.size_bytes,
+                        "chunk_count": doc.chunk_count,
+                        "date_added": doc.date_added.isoformat(),
+                    }
+                    for doc in documents
+                ],
+            },
+        }
+
+    async def _handle_context_delete(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-delete tool."""
+        if not args.get("confirm", False):
+            return {
+                "success": False,
+                "error": "confirmation_required",
+                "message": "Set confirm=true to delete context",
+            }
+        
+        name = args["name"]
+        context = self.knowledge_service.get_context(name)
+        
+        if not context:
+            return {
+                "success": False,
+                "error": "not_found",
+                "message": f"Context not found: {name}",
+            }
+        
+        message = self.knowledge_service.delete_context(name)
+        
+        return {
+            "success": True,
+            "message": f"Deleted context: {name}",
+            "documents_affected": context.document_count,
         }
 
     def _has_requests(self, body: Any) -> bool:

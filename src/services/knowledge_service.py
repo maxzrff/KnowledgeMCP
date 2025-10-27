@@ -5,7 +5,7 @@ Core knowledge service for document management.
 import asyncio
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from src.config.settings import get_settings
@@ -440,6 +440,65 @@ class KnowledgeService:
         logger.info(f"Cleared knowledge base: {count} documents removed")
 
         return count
+
+    def create_context(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None
+    ):
+        """
+        Create a new context.
+        
+        Args:
+            name: Unique context name
+            description: Optional description
+            metadata: Optional metadata dictionary
+            
+        Returns:
+            Created Context object
+        """
+        return self.context_service.create_context(name, description, metadata)
+
+    def list_contexts(self):
+        """
+        List all contexts.
+        
+        Returns:
+            List of Context objects
+        """
+        return self.context_service.list_contexts()
+
+    def get_context(self, name: str):
+        """
+        Get a specific context by name.
+        
+        Args:
+            name: Context name
+            
+        Returns:
+            Context object
+        """
+        return self.context_service.get_context(name)
+
+    def delete_context(self, name: str) -> str:
+        """
+        Delete a context.
+        
+        Args:
+            name: Context name to delete
+            
+        Returns:
+            Success message
+        """
+        # Remove from ChromaDB
+        try:
+            self.vector_store.delete_collection(name)
+        except Exception as e:
+            logger.warning(f"Could not delete ChromaDB collection {name}: {e}")
+        
+        # Remove from context service
+        return self.context_service.delete_context(name)
 
     def get_statistics(self) -> dict[str, Any]:
         """
