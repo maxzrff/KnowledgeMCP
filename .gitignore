@@ -75,7 +75,9 @@ config.*.yaml
 
 # Server runtime files
 .mcp_server.pid
+.mcp_http_server.pid
 mcp_server.log
+mcp_http_server.log
 nohup.out
 
 # Model cache (can be large) - but allow src/models/ code directory
