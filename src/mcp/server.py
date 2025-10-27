@@ -7,17 +7,17 @@ import json
 from pathlib import Path
 from typing import Any
 
-from mcp.server.stdio import stdio_server
 from mcp.server.sse import SseServerTransport
+from mcp.server.stdio import stdio_server
 from starlette.applications import Starlette
 from starlette.routing import Route
 
 from mcp import types
 from mcp.server import Server
+from src.config.settings import get_settings
 from src.mcp.tools import ALL_TOOLS
 from src.services.knowledge_service import KnowledgeService
 from src.utils.logging_config import get_logger, setup_logging
-from src.config.settings import get_settings
 
 logger = get_logger(__name__)
 
@@ -67,6 +67,14 @@ class KnowledgeMCPServer:
                 result = await self._handle_status(arguments)
             elif name == "knowledge-task-status":
                 result = await self._handle_task_status(arguments)
+            elif name == "knowledge-context-create":
+                result = await self._handle_context_create(arguments)
+            elif name == "knowledge-context-list":
+                result = await self._handle_context_list(arguments)
+            elif name == "knowledge-context-show":
+                result = await self._handle_context_show(arguments)
+            elif name == "knowledge-context-delete":
+                result = await self._handle_context_delete(arguments)
             else:
                 raise ValueError(f"Unknown tool: {name}")
 
@@ -87,12 +95,19 @@ class KnowledgeMCPServer:
         metadata = args.get("metadata", {})
         async_processing = args.get("async", True)
         force_ocr = args.get("force_ocr", False)
+        contexts_str = args.get("contexts", "default")
+
+        # Parse comma-separated contexts
+        contexts = [ctx.strip() for ctx in contexts_str.split(",") if ctx.strip()]
+        if not contexts:
+            contexts = ["default"]
 
         result_id = await self.knowledge_service.add_document(
             file_path,
             metadata=metadata,
             async_processing=async_processing,
             force_ocr=force_ocr,
+            contexts=contexts,
         )
 
         if async_processing:
@@ -100,6 +115,7 @@ class KnowledgeMCPServer:
                 "success": True,
                 "task_id": result_id,
                 "message": "Document queued for processing",
+                "contexts": contexts,
                 "force_ocr": force_ocr,
             }
         document = self.knowledge_service.get_document(result_id)
@@ -107,6 +123,7 @@ class KnowledgeMCPServer:
             "success": True,
             "document_id": result_id,
             "filename": document.filename if document else None,
+            "contexts": document.contexts if document else contexts,
             "chunks_created": document.chunk_count if document else 0,
             "processing_method": document.processing_method.value if document and document.processing_method else None,
         }
@@ -116,16 +133,19 @@ class KnowledgeMCPServer:
         query = args["query"]
         top_k = args.get("top_k", 10)
         min_relevance = args.get("min_relevance", 0.0)
+        context = args.get("context")
 
         results = await self.knowledge_service.search(
             query=query,
             top_k=top_k,
             min_relevance=min_relevance,
+            context=context,
         )
 
         return {
             "success": True,
             "query": query,
+            "context": context if context else "all",
             "total_results": len(results),
             "results": results,
         }
@@ -133,11 +153,13 @@ class KnowledgeMCPServer:
     async def _handle_show(self, args: dict[str, Any]) -> dict[str, Any]:
         """Handle knowledge-show tool."""
         limit = args.get("limit", 100)
-        documents = self.knowledge_service.list_documents()[:limit]
+        context = args.get("context")
+        documents = self.knowledge_service.list_documents(context=context)[:limit]
 
         return {
             "success": True,
-            "total_count": len(self.knowledge_service.list_documents()),
+            "context": context if context else "all",
+            "total_count": len(self.knowledge_service.list_documents(context=context)),
             "documents": [
                 {
                     "id": doc.id,
@@ -145,6 +167,7 @@ class KnowledgeMCPServer:
                     "format": doc.format.value,
                     "size_bytes": doc.size_bytes,
                     "chunk_count": doc.chunk_count,
+                    "contexts": doc.contexts,
                     "processing_status": doc.processing_status.value,
                     "processing_method": doc.processing_method.value if doc.processing_method else None,
                     "date_added": doc.date_added.isoformat(),
@@ -240,17 +263,111 @@ class KnowledgeMCPServer:
             "error": task.error,
         }
 
+    async def _handle_context_create(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-create tool."""
+        name = args["name"]
+        description = args.get("description")
+        metadata = args.get("metadata", {})
+
+        context = self.knowledge_service.context_service.create_context(
+            name=name,
+            description=description,
+            metadata=metadata,
+        )
+
+        return {
+            "success": True,
+            "context": {
+                "name": context.name,
+                "description": context.description,
+                "created_at": context.created_at.isoformat(),
+                "document_count": context.document_count,
+            },
+        }
+
+    async def _handle_context_list(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-list tool."""
+        contexts = self.knowledge_service.context_service.list_contexts()
+
+        return {
+            "success": True,
+            "total_count": len(contexts),
+            "contexts": [
+                {
+                    "name": ctx.name,
+                    "description": ctx.description,
+                    "document_count": ctx.document_count,
+                    "created_at": ctx.created_at.isoformat(),
+                    "updated_at": ctx.updated_at.isoformat(),
+                }
+                for ctx in contexts
+            ],
+        }
+
+    async def _handle_context_show(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-show tool."""
+        name = args["name"]
+
+        context = self.knowledge_service.context_service.get_context(name)
+        documents = self.knowledge_service.list_documents(context=name)
+
+        return {
+            "success": True,
+            "context": {
+                "name": context.name,
+                "description": context.description,
+                "document_count": context.document_count,
+                "created_at": context.created_at.isoformat(),
+                "updated_at": context.updated_at.isoformat(),
+            },
+            "documents": [
+                {
+                    "id": doc.id,
+                    "filename": doc.filename,
+                    "format": doc.format.value,
+                    "size_bytes": doc.size_bytes,
+                    "chunk_count": doc.chunk_count,
+                    "processing_status": doc.processing_status.value,
+                }
+                for doc in documents
+            ],
+        }
+
+    async def _handle_context_delete(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handle knowledge-context-delete tool."""
+        name = args["name"]
+        confirm = args.get("confirm", False)
+
+        if not confirm:
+            return {
+                "success": False,
+                "error": "confirmation_required",
+                "message": "Context deletion requires confirm=true",
+            }
+
+        # Delete from vector store
+        self.knowledge_service.vector_store.delete_collection(name)
+
+        # Delete from context service
+        message = self.knowledge_service.context_service.delete_context(name)
+
+        return {
+            "success": True,
+            "message": message,
+            "context": name,
+        }
+
     async def run(self) -> None:
         """Run the MCP server."""
         settings = get_settings()
         logger.info("Starting MCP Knowledge Server...")
-        
+
         if settings.mcp.transport == "http":
             # HTTP transport using SSE
             logger.info(f"Starting HTTP server on {settings.mcp.host}:{settings.mcp.port}")
-            
+
             sse = SseServerTransport("/messages")
-            
+
             async def handle_sse(request):
                 async with sse.connect_sse(
                     request.scope, request.receive, request._send
@@ -258,14 +375,14 @@ class KnowledgeMCPServer:
                     await self.app.run(
                         streams[0], streams[1], self.app.create_initialization_options()
                     )
-            
+
             starlette_app = Starlette(
                 debug=True,
                 routes=[
                     Route("/messages", endpoint=handle_sse),
                 ],
             )
-            
+
             import uvicorn
             config = uvicorn.Config(
                 starlette_app,
@@ -289,7 +406,7 @@ async def main():
     """Main entry point."""
     setup_logging(level="INFO")
     settings = get_settings()
-    
+
     if settings.mcp.transport == "http-streamable":
         # Use HTTP Streamable transport
         from src.mcp.http_server import HTTPStreamableServer

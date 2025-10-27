@@ -78,9 +78,10 @@ config.*.yaml
 mcp_server.log
 nohup.out
 
-# Model cache (can be large)
+# Model cache (can be large) - but allow src/models/ code directory
 models/
 .cache/
+!src/models/
 
 # Jupyter Notebooks
 .ipynb_checkpoints

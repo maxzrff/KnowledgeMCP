@@ -16,6 +16,7 @@ from src.models.document import (
     ProcessingTask,
     TaskStatus,
 )
+from src.services.context_service import ContextService
 from src.services.embedding_service import EmbeddingService
 from src.services.text_extractor import TextExtractor
 from src.services.vector_store import VectorStore
@@ -27,10 +28,11 @@ logger = get_logger(__name__)
 
 
 class KnowledgeService:
-    """Core service for knowledge base operations."""
+    """Core service for knowledge base operations with multi-context support."""
 
     def __init__(self):
         self.settings = get_settings()
+        self.context_service = ContextService()
         self.text_extractor = TextExtractor(
             force_ocr=self.settings.ocr.force_ocr,
             ocr_language=self.settings.ocr.language,
@@ -103,6 +105,7 @@ class KnowledgeService:
         metadata: dict[str, Any] | None = None,
         async_processing: bool = True,
         force_ocr: bool = False,
+        contexts: list[str] | None = None,
     ) -> str:
         """
         Add a document to the knowledge base.
@@ -112,10 +115,20 @@ class KnowledgeService:
             metadata: Optional metadata dictionary
             async_processing: If True, process asynchronously and return task ID
             force_ocr: Force OCR even if text extraction is available
+            contexts: List of context names to add document to (default: ["default"])
 
         Returns:
             Task ID if async, document ID if sync
         """
+        # Default to ["default"] if no contexts specified
+        if not contexts:
+            contexts = ["default"]
+        
+        # Validate all contexts exist
+        for ctx in contexts:
+            if not self.context_service.context_exists(ctx):
+                raise ValueError(f"Context '{ctx}' does not exist")
+        
         # Validation
         validate_file_exists(file_path)
         document_format = validate_file_format(file_path)
@@ -130,13 +143,14 @@ class KnowledgeService:
                 logger.info(f"Duplicate document detected: {file_path.name}")
                 return doc.id
 
-        # Create document
+        # Create document with contexts
         document = Document(
             filename=file_path.name,
             file_path=str(file_path),
             content_hash=content_hash,
             format=document_format,
             size_bytes=file_path.stat().st_size,
+            contexts=contexts,
             metadata=metadata or {},
         )
 
@@ -224,48 +238,54 @@ class KnowledgeService:
                 batch_size=self.settings.embedding.batch_size,
             )
 
-            # Store in vector database
-            embedding_ids = []
-            embedding_metadatas = []
-
-            for i, (_chunk, _embedding_vector) in enumerate(zip(chunks, embeddings, strict=True)):
-                embedding_id = str(uuid4())
-                embedding_ids.append(embedding_id)
-
-                embedding_metadatas.append(
-                    {
-                        "document_id": document.id,
-                        "filename": document.filename,
-                        "file_path": document.file_path,
-                        "content_hash": document.content_hash,
-                        "size_bytes": document.size_bytes,
-                        "chunk_index": i,
-                        "format": document.format.value,
-                        "processing_method": (
-                            document.processing_method.value
-                            if document.processing_method
-                            else "unknown"
-                        ),
-                    }
+            # Store in vector database - add to each context
+            for context in document.contexts:
+                # Create unique embedding IDs per context
+                context_embedding_ids = [f"{context}_{str(uuid4())}" for _ in chunks]
+                
+                context_metadatas = []
+                for i in range(len(chunks)):
+                    context_metadatas.append(
+                        {
+                            "document_id": document.id,
+                            "filename": document.filename,
+                            "file_path": document.file_path,
+                            "content_hash": document.content_hash,
+                            "size_bytes": document.size_bytes,
+                            "chunk_index": i,
+                            "format": document.format.value,
+                            "context": context,
+                            "processing_method": (
+                                document.processing_method.value
+                                if document.processing_method
+                                else "unknown"
+                            ),
+                        }
+                    )
+                
+                # Add to vector store for this context
+                await self.vector_store.add_embeddings(
+                    collection_name="knowledge_base_documents",  # Legacy parameter
+                    ids=context_embedding_ids,
+                    embeddings=embeddings,
+                    documents=chunks,
+                    metadatas=context_metadatas,
+                    context=context,
                 )
-
-            # Add to vector store
-            await self.vector_store.add_embeddings(
-                collection_name="knowledge_base_documents",
-                ids=embedding_ids,
-                embeddings=embeddings,
-                documents=chunks,
-                metadatas=embedding_metadatas,
-            )
+                
+                # Update context document count
+                try:
+                    self.context_service.increment_document_count(context)
+                except Exception as e:
+                    logger.warning(f"Could not update document count for context '{context}': {e}")
 
             # Update document
             document.chunk_count = len(chunks)
-            document.embedding_ids = embedding_ids
             document.processing_status = ProcessingStatus.COMPLETED
 
             logger.info(
                 f"Document processed: {document.filename} - "
-                f"{len(chunks)} chunks, {len(embeddings)} embeddings"
+                f"{len(chunks)} chunks in contexts: {', '.join(document.contexts)}"
             )
         finally:
             # Restore original force_ocr setting
@@ -276,8 +296,19 @@ class KnowledgeService:
         """Get status of processing task."""
         return self._tasks.get(task_id)
 
-    def list_documents(self) -> list[Document]:
-        """List all documents in knowledge base."""
+    def list_documents(self, context: str | None = None) -> list[Document]:
+        """
+        List all documents in knowledge base.
+        
+        Args:
+            context: Optional context filter (None = all documents)
+            
+        Returns:
+            List of Document objects
+        """
+        if context:
+            # Filter documents by context
+            return [doc for doc in self._documents.values() if context in doc.contexts]
         return list(self._documents.values())
 
     def get_document(self, document_id: str) -> Document | None:
@@ -290,6 +321,7 @@ class KnowledgeService:
         top_k: int = 10,
         min_relevance: float = 0.0,
         filters: dict[str, Any] | None = None,
+        context: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         Search the knowledge base using natural language query.
@@ -299,6 +331,7 @@ class KnowledgeService:
             top_k: Number of results to return
             min_relevance: Minimum relevance score threshold
             filters: Optional metadata filters
+            context: Optional context name (None = search all contexts)
 
         Returns:
             List of search results with relevance scores
@@ -309,12 +342,13 @@ class KnowledgeService:
         # Generate query embedding
         query_embedding = await self.embedding_service.encode_single(query)
 
-        # Search vector store
+        # Search vector store (context-aware)
         results = await self.vector_store.search(
             collection_name="knowledge_base_documents",
             query_embedding=query_embedding,
             top_k=top_k,
             where=filters,
+            context=context,
         )
 
         # Format results
@@ -337,17 +371,19 @@ class KnowledgeService:
                     "relevance_score": relevance_score,
                     "chunk_index": metadata.get("chunk_index"),
                     "format": metadata.get("format"),
+                    "context": metadata.get("context"),
                     "processing_method": metadata.get("processing_method"),
                 }
             )
 
-        logger.info(f"Search query '{query[:50]}...' returned {len(search_results)} results")
+        context_info = f" in context '{context}'" if context else " across all contexts"
+        logger.info(f"Search query '{query[:50]}...'{context_info} returned {len(search_results)} results")
 
         return search_results
 
     async def remove_document(self, document_id: str) -> bool:
         """
-        Remove a document from the knowledge base.
+        Remove a document from the knowledge base and all contexts.
 
         Args:
             document_id: ID of document to remove
@@ -360,17 +396,24 @@ class KnowledgeService:
             logger.warning(f"Document not found: {document_id}")
             return False
 
-        # Remove embeddings from vector store by querying with document_id filter
-        collection = self.vector_store.get_or_create_collection("knowledge_base_documents")
-        try:
-            # Get all embeddings for this document
-            results = collection.get(where={"document_id": document_id})
-            if results and results.get("ids"):
-                embedding_ids = results["ids"]
-                collection.delete(ids=embedding_ids)
-                logger.info(f"Removed {len(embedding_ids)} embeddings for document {document_id}")
-        except Exception as e:
-            logger.error(f"Error removing embeddings for document {document_id}: {e}")
+        # Remove embeddings from each context
+        for context in document.contexts:
+            try:
+                collection = self.vector_store.get_collection(context)
+                # Get all embeddings for this document in this context
+                results = collection.get(where={"document_id": document_id})
+                if results and results.get("ids"):
+                    embedding_ids = results["ids"]
+                    collection.delete(ids=embedding_ids)
+                    logger.info(f"Removed {len(embedding_ids)} embeddings for document {document_id} from context '{context}'")
+                
+                # Update context document count
+                try:
+                    self.context_service.decrement_document_count(context)
+                except Exception as e:
+                    logger.warning(f"Could not update document count for context '{context}': {e}")
+            except Exception as e:
+                logger.error(f"Error removing embeddings for document {document_id} from context '{context}': {e}")
 
         # Remove document
         del self._documents[document_id]

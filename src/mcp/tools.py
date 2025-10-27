@@ -29,6 +29,11 @@ KNOWLEDGE_ADD_TOOL = {
                 "description": "Process asynchronously and return task ID",
                 "default": True,
             },
+            "contexts": {
+                "type": "string",
+                "description": "Comma-separated list of context names (e.g., 'aws,healthcare'). Defaults to 'default'",
+                "default": "default",
+            },
         },
         "required": ["file_path"],
     },
@@ -58,6 +63,10 @@ KNOWLEDGE_SEARCH_TOOL = {
                 "minimum": 0.0,
                 "maximum": 1.0,
             },
+            "context": {
+                "type": "string",
+                "description": "Optional context name to search within (omit to search all contexts)",
+            },
         },
         "required": ["query"],
     },
@@ -73,6 +82,10 @@ KNOWLEDGE_SHOW_TOOL = {
                 "type": "integer",
                 "description": "Maximum number of documents to return",
                 "default": 100,
+            },
+            "context": {
+                "type": "string",
+                "description": "Optional context name to filter documents (omit to show all)",
             },
         },
     },
@@ -138,6 +151,74 @@ KNOWLEDGE_TASK_STATUS_TOOL = {
     },
 }
 
+KNOWLEDGE_CONTEXT_CREATE_TOOL = {
+    "name": "knowledge-context-create",
+    "description": "Create a new context for organizing documents",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Unique context name (alphanumeric, dash, underscore, 1-64 chars)",
+            },
+            "description": {
+                "type": "string",
+                "description": "Optional description of the context",
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Optional metadata dictionary",
+                "default": {},
+            },
+        },
+        "required": ["name"],
+    },
+}
+
+KNOWLEDGE_CONTEXT_LIST_TOOL = {
+    "name": "knowledge-context-list",
+    "description": "List all contexts in the knowledge base",
+    "inputSchema": {
+        "type": "object",
+        "properties": {},
+    },
+}
+
+KNOWLEDGE_CONTEXT_SHOW_TOOL = {
+    "name": "knowledge-context-show",
+    "description": "Show details of a specific context including its documents",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Context name",
+            },
+        },
+        "required": ["name"],
+    },
+}
+
+KNOWLEDGE_CONTEXT_DELETE_TOOL = {
+    "name": "knowledge-context-delete",
+    "description": "Delete a context and all its vectors (documents remain in other contexts)",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Context name to delete",
+            },
+            "confirm": {
+                "type": "boolean",
+                "description": "Confirmation flag for destructive operation",
+                "default": False,
+            },
+        },
+        "required": ["name", "confirm"],
+    },
+}
+
 ALL_TOOLS = [
     KNOWLEDGE_ADD_TOOL,
     KNOWLEDGE_SEARCH_TOOL,
@@ -146,4 +227,8 @@ ALL_TOOLS = [
     KNOWLEDGE_CLEAR_TOOL,
     KNOWLEDGE_STATUS_TOOL,
     KNOWLEDGE_TASK_STATUS_TOOL,
+    KNOWLEDGE_CONTEXT_CREATE_TOOL,
+    KNOWLEDGE_CONTEXT_LIST_TOOL,
+    KNOWLEDGE_CONTEXT_SHOW_TOOL,
+    KNOWLEDGE_CONTEXT_DELETE_TOOL,
 ]
