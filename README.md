@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/maxzrff-knowledgemcp-badge.png)](https://mseep.ai/app/maxzrff-knowledgemcp)
+
 # MCP Knowledge Server
 
 A Model Context Protocol (MCP) server that enables AI coding assistants and agentic tools to leverage local knowledge through semantic search.
